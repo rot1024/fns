@@ -76,28 +76,32 @@ impl Entry {
             .map(|s| s.to_string())
     }
 
-    pub fn new_path(&self, sep: Option<&str>, pad: usize) -> Option<PathBuf> {
+    pub fn new_path(&self, shift: bool, sep: Option<&str>, pad: usize) -> Option<PathBuf> {
         if let Some(n) = self.n {
             let mut p = self.p.to_path_buf();
             p.set_file_name(format!(
                 "{}{:0w$}{}",
                 self.b,
-                n + 1,
+                if shift { n + 1 } else { n },
                 self.a.as_ref().map(Cow::from).unwrap_or(Cow::from("")),
                 w = pad
             ));
             Some(p)
         } else if let Some(sep) = sep {
-            let mut p = self.p.to_path_buf();
-            p.set_file_name(format!(
-                "{}{}{:0w$}{}",
-                self.b,
-                sep,
-                1,
-                self.a.as_ref().map(Cow::from).unwrap_or(Cow::from("")),
-                w = pad
-            ));
-            Some(p)
+            if shift {
+                let mut p = self.p.to_path_buf();
+                p.set_file_name(format!(
+                    "{}{}{:0w$}{}",
+                    self.b,
+                    sep,
+                    1,
+                    self.a.as_ref().map(Cow::from).unwrap_or(Cow::from("")),
+                    w = pad
+                ));
+                Some(p)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -185,7 +189,7 @@ fn test_entry_new_path() {
             a: Some(".txt".to_string()),
             n: Some(1),
         }
-        .new_path(None, 1),
+        .new_path(true, None, 1),
         Some(PathBuf::from("aaa_2.txt")),
     );
     assert_eq!(
@@ -195,7 +199,7 @@ fn test_entry_new_path() {
             a: None,
             n: Some(3),
         }
-        .new_path(None, 3),
+        .new_path(true, None, 3),
         Some(PathBuf::from("parent/aaa004")),
     );
     assert_eq!(
@@ -205,7 +209,7 @@ fn test_entry_new_path() {
             a: Some(".jpg".to_string()),
             n: None,
         }
-        .new_path(Some("_"), 3),
+        .new_path(true, Some("_"), 3),
         Some(PathBuf::from("parent/aaa_001.jpg")),
     );
 }

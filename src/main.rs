@@ -20,25 +20,28 @@ fn main2() -> io::Result<()> {
 
 fn exec(p: &Path) -> io::Result<()> {
     let before = entries(p)?;
-    let max_num = before.iter().filter_map(|e| e.num()).max();
-    let sep = before
-        .iter()
-        .find(|e| e.num().is_some())
-        .and_then(|e| e.file_name_sep());
-    for e in before {
-        if let Some(p) = e.new_path(sep.as_deref(), log10(max_num.unwrap_or(1))) {
-            let from = e.old_path();
-            if let (Some(ff), Some(tf)) = (from.file_name(), p.file_name()) {
-                eprintln!("{} -> {}", ff.to_string_lossy(), tf.to_string_lossy());
+    for group in before {
+        let max_num = group.iter().filter_map(|e| e.num()).max();
+        let sep = group
+            .iter()
+            .find(|e| e.num().is_some())
+            .and_then(|e| e.file_name_sep());
+        let no_shift = group.iter().find(|e| e.num().is_none()).is_none();
+        for e in group {
+            if let Some(p) = e.new_path(!no_shift, sep.as_deref(), log10(max_num.unwrap_or(1))) {
+                let from = e.old_path();
+                if let (Some(ff), Some(tf)) = (from.file_name(), p.file_name()) {
+                    eprintln!("{} -> {}", ff.to_string_lossy(), tf.to_string_lossy());
+                }
+                rename(from, p)?;
             }
-            rename(from, p)?;
         }
     }
 
     Ok(())
 }
 
-fn entries(d: &Path) -> io::Result<Vec<entry::Entry>> {
+fn entries(d: &Path) -> io::Result<Vec<Vec<entry::Entry>>> {
     Ok(read_dir(d)?
         .collect::<io::Result<Vec<_>>>()?
         .into_iter()
@@ -70,8 +73,7 @@ fn entries(d: &Path) -> io::Result<Vec<entry::Entry>> {
                 None
             }
         })
-        .flatten()
-        .collect::<Vec<_>>())
+        .collect::<Vec<Vec<_>>>())
 }
 
 fn log10(u: usize) -> usize {
@@ -109,13 +111,20 @@ mod test {
             entries(dir.path())
                 .unwrap()
                 .into_iter()
-                .map(|e| (e.file_name(), e.num()))
+                .map(|g| g
+                    .iter()
+                    .map(|e| (e.file_name(), e.num()))
+                    .collect::<Vec<_>>())
                 .collect::<Vec<_>>(),
             vec![
-                ("a_2.txt".to_string(), Some(2)),
-                ("a_1.txt".to_string(), Some(1)),
-                ("c_2.txt".to_string(), Some(2)),
-                ("c_1.txt".to_string(), Some(1)),
+                vec![
+                    ("a_2.txt".to_string(), Some(2)),
+                    ("a_1.txt".to_string(), Some(1))
+                ],
+                vec![
+                    ("c_2.txt".to_string(), Some(2)),
+                    ("c_1.txt".to_string(), Some(1))
+                ],
             ],
         );
     }
@@ -132,6 +141,8 @@ mod test {
             file2.write_all(b"bbbb").unwrap();
             let mut file2 = File::create(dir.path().join("a_2.txt")).unwrap();
             file2.write_all(b"cccc").unwrap();
+            let _ = File::create(dir.path().join("e_01.txt")).unwrap();
+            let _ = File::create(dir.path().join("e_02.txt")).unwrap();
         }
 
         exec(dir.path()).unwrap();
@@ -140,6 +151,8 @@ mod test {
         assert_eq!(
             filenames,
             vec![
+                "e_2.txt".to_string(),
+                "e_1.txt".to_string(),
                 "a_1.txt".to_string(),
                 "a_2.txt".to_string(),
                 "a_3.txt".to_string(),
